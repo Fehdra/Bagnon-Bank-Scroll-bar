@@ -1,3 +1,13 @@
+## Retail Midnight scrollbar modification
+
+Adds an automatic scrollbar and mouse-wheel scrolling to tall bag and bank windows, keeping bag buttons and bottom controls visible. Includes padding around the item grid to prevent clipped slot borders.
+
+Confirmed working in-game with Bagnon 12.1.7 on Retail Midnight. See [installation and restoration instructions](SCROLLBAR-PATCH.md). Addon updates may overwrite the modification.
+
+![Bagnon bank scrollbar](Screenshot-2026-10-23-230526.png)
+
+---
+
 ![Preview](https://jaliborc.com/media/addons/large/bagnon/watsup.jpg)
 
 [![Install](https://img.shields.io/badge/install-curseforge-f16436)](https://www.curseforge.com/wow/addons/bagnon)

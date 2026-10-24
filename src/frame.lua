@@ -29,6 +29,8 @@ end
 
 function Frame:RegisterEvents()
 	self:RegisterFrameSignal('BAG_FRAME_TOGGLED', 'Layout')
+	self:RegisterEvent('DISPLAY_SIZE_CHANGED', 'Layout')
+	self:RegisterEvent('UI_SCALE_CHANGED', 'Layout')
 end
 
 
@@ -57,6 +59,19 @@ function Frame:Layout()
 		foot = grow(foot, true, self:PlaceMoney())
 		foot = grow(foot, true, self:PlaceCurrencies(width))
 		foot = grow(foot, false, self:PlaceBroker())
+
+		-- Limit the item viewport in frame coordinates, including UI and addon scale.
+		local screenHeight = UIParent:GetHeight() * UIParent:GetEffectiveScale() / self:GetEffectiveScale()
+		local fullHeight = self.ItemScrollContent:GetHeight()
+		local viewHeight = min(fullHeight, max(1, screenHeight * 0.9 - (main - fullHeight) - foot - 30))
+		local scrolling = viewHeight < fullHeight
+		self.ItemScroll:SetHeight(viewHeight)
+		self.ItemScrollBar:SetShown(scrolling)
+		self.ItemScrollBar:SetMinMaxValues(0, max(0, fullHeight - viewHeight))
+		self.ItemScrollBar:SetValue(min(self.ItemScrollBar:GetValue(), max(0, fullHeight - viewHeight)))
+		self.ItemScroll:SetVerticalScroll(self.ItemScrollBar:GetValue())
+		main = main - fullHeight + viewHeight
+		width = width + (scrolling and 24 or 0)
 			
 		self:PlaceSearchBar()
 		self:PlaceFooter(foot)
@@ -152,14 +167,69 @@ end
 
 function Frame:PlaceItemGroup()
 	local group = self:GetWidget('ItemGroup', self.Bags)
+	if not self.ItemScroll then
+		self:CreateItemScroll(group)
+	end
+	local scroll = self.ItemScroll
 	local anchor = self:AreBagsShown() and self.BagGroup
 				or #self.MenuButtons > 0 and self.MenuButtons[1]
 				or self.Title
 	local inset = anchor ~= self.BagGroup and self.inset or 0
+	local padding = 4 * group:GetProfile().itemScale
 
 	group:SetScript('OnSizeChanged', function() self:Layout() end)
-	group:SetPoint('TOPLEFT', anchor, 'BOTTOMLEFT', inset, -4-inset)
-	return group:GetWidth() - 2 + (self.inset or 0) * 2, group:GetHeight() + 6
+	-- Slot borders extend beyond the grid's nominal bounds. Keep them inside
+	-- the clip rectangle, including the first and last rows at either end.
+	group:ClearAllPoints()
+	group:SetPoint('TOPLEFT', self.ItemScrollContent, 'TOPLEFT', padding, -padding)
+	self.ItemScrollContent:SetSize(group:GetWidth() + padding * 2, group:GetHeight() + padding * 2)
+	scroll:ClearAllPoints()
+	scroll:SetPoint('TOPLEFT', anchor, 'BOTTOMLEFT', inset - padding, -4-inset)
+	scroll:SetWidth(self.ItemScrollContent:GetWidth())
+	return group:GetWidth() + padding - 2 + (self.inset or 0) * 2, self.ItemScrollContent:GetHeight() + 6
+end
+
+function Frame:CreateItemScroll(group)
+	local scroll = CreateFrame('ScrollFrame', nil, self)
+	local content = CreateFrame('Frame', nil, scroll)
+	local bar = CreateFrame('Slider', nil, self)
+	self.ItemScroll, self.ItemScrollContent, self.ItemScrollBar = scroll, content, bar
+
+	-- Keep the existing bag proxies and their IDs intact for item interactions.
+	group:SetParent(content)
+	group:ClearAllPoints()
+	scroll:SetScrollChild(content)
+	content:SetPoint('TOPLEFT')
+
+	bar:SetOrientation('VERTICAL')
+	bar:SetWidth(16)
+	bar:SetPoint('TOPLEFT', scroll, 'TOPRIGHT', 4, 0)
+	bar:SetPoint('BOTTOMLEFT', scroll, 'BOTTOMRIGHT', 4, 0)
+	bar:SetMinMaxValues(0, 0)
+	bar:SetValueStep(1)
+	bar:SetValue(0)
+	bar:EnableMouse(true)
+	local track = bar:CreateTexture(nil, 'BACKGROUND')
+	track:SetAllPoints()
+	track:SetColorTexture(0, 0, 0, 0.5)
+	bar:SetThumbTexture('Interface\\Buttons\\WHITE8X8')
+	local thumb = bar:GetThumbTexture()
+	thumb:SetSize(12, 32)
+	thumb:SetVertexColor(0.7, 0.7, 0.7, 0.9)
+	bar:SetScript('OnValueChanged', function(_, value)
+		scroll:SetVerticalScroll(value)
+	end)
+
+	local function onWheel(_, delta)
+		local low, high = bar:GetMinMaxValues()
+		local profile = group:GetProfile()
+		local step = (37 + profile.spacing) * profile.itemScale * 3
+		bar:SetValue(max(low, min(high, bar:GetValue() - delta * step)))
+	end
+	scroll:EnableMouseWheel(true)
+	scroll:SetScript('OnMouseWheel', onWheel)
+	bar:EnableMouseWheel(true)
+	bar:SetScript('OnMouseWheel', onWheel)
 end
 
 function Frame:PlaceBagGroup()
